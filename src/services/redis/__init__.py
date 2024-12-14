@@ -4,7 +4,7 @@ Provides a Redis-based caching implementation with support for JSON and Pickle s
 """
 
 from .interface import CacheInterface
-from .redis import RedisCache
+from .service import RedisCache
 
 # Create a default cache instance for general use
 default_cache = RedisCache(prefix="discord_bot")

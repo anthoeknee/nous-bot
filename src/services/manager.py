@@ -1,5 +1,5 @@
 # src/services/manager.py
-from typing import Optional, Dict, Type, Any
+from typing import Optional, Dict, Any
 import importlib
 from src.core.config import config
 from src.utils.logging import get_logger
