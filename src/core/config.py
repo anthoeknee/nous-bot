@@ -1,105 +1,83 @@
-from typing import Optional
 import os
-from dataclasses import dataclass
+from typing import Dict, Any
 from dotenv import load_dotenv
 
 
-@dataclass
-class DatabaseConfig:
-    session_url: str
-    transaction_url: str
-    direct_url: str
-    use_pooling: bool
-    pool_size: int
-    pool_timeout: int
-
-
-@dataclass
-class RedisConfig:
-    host: str
-    port: int
-    password: Optional[str]
-    conversation_ttl: int
-
-
-@dataclass
-class DiscordConfig:
-    token: str
-    secret: str
-    owner_id: int
-    command_prefix: str
-
-
-@dataclass
-class AIConfig:
-    xai_key: str
-    openai_key: str
-    groq_key: str
-    cohere_key: str
-    fal_key: str
-    google_key: str
-
-
 class Config:
-    _instance: Optional["Config"] = None
+    """Singleton configuration class for the Discord bot."""
 
-    def __init__(self):
-        if Config._instance is not None:
-            raise RuntimeError("Config is a singleton. Use Config.get()")
+    _instance = None
 
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._load_config()
+        return cls._instance
+
+    def _load_config(self):
+        """Load all configuration values."""
         # Load environment variables
         load_dotenv()
 
-        # Initialize configurations
-        self.database = DatabaseConfig(
-            session_url=os.getenv("DATABASE_SESSION_URL", ""),
-            transaction_url=os.getenv("DATABASE_TRANSACTION_URL", ""),
-            direct_url=os.getenv("DATABASE_DIRECT_URL", ""),
-            use_pooling=os.getenv("USE_CONNECTION_POOLING", "true").lower() == "true",
-            pool_size=int(os.getenv("DATABASE_POOL_SIZE", "20")),
-            pool_timeout=int(os.getenv("DATABASE_POOL_TIMEOUT", "30")),
-        )
+        # Discord Configuration
+        self.DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+        self.DISCORD_SECRET = os.getenv("DISCORD_SECRET")
+        self.DISCORD_OWNER_ID = int(os.getenv("DISCORD_OWNER_ID", 0))
+        self.DISCORD_COMMAND_PREFIX = os.getenv("DISCORD_COMMAND_PREFIX", "n!")
 
-        self.redis = RedisConfig(
-            host=os.getenv("REDIS_HOST", "localhost"),
-            port=int(os.getenv("REDIS_PORT", "6379")),
-            password=os.getenv("REDIS_PASSWORD"),
-            conversation_ttl=int(os.getenv("REDIS_CONVERSATION_TTL", "5400")),
-        )
+        # AI Provider API Keys
+        self.XAI_API_KEY = os.getenv("XAI_API_KEY")
+        self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+        self.GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+        self.COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+        self.FAL_API_KEY = os.getenv("FAL_API_KEY")
+        self.GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-        self.discord = DiscordConfig(
-            token=os.getenv("DISCORD_TOKEN", ""),
-            secret=os.getenv("DISCORD_SECRET", ""),
-            owner_id=int(os.getenv("DISCORD_OWNER_ID", "0")),
-            command_prefix=os.getenv("DISCORD_COMMAND_PREFIX", "n!"),
-        )
+        # Service Configurations
+        self.SERVICES_CONFIG = {
+            "cache": {
+                "enabled": True,
+                "class": "src.services.cache.RedisCache",
+                "config": {
+                    "host": os.getenv("REDIS_HOST", "localhost"),
+                    "port": int(os.getenv("REDIS_PORT", 6379)),
+                    "password": os.getenv("REDIS_PASSWORD", ""),
+                    "prefix": "discord_bot",
+                    "ttl": int(os.getenv("REDIS_CONVERSATION_TTL", 5400)),
+                },
+            },
+            "database": {
+                "enabled": True,
+                "class": "src.services.database.DatabaseSession",
+                "config": {
+                    "url": os.getenv("DATABASE_SESSION_URL"),
+                    "pool_size": int(os.getenv("DATABASE_POOL_SIZE", 20)),
+                    "pool_timeout": int(os.getenv("DATABASE_POOL_TIMEOUT", 30)),
+                    "use_connection_pooling": os.getenv(
+                        "USE_CONNECTION_POOLING", "true"
+                    ).lower()
+                    == "true",
+                },
+            },
+        }
 
-        self.ai = AIConfig(
-            xai_key=os.getenv("XAI_API_KEY", ""),
-            openai_key=os.getenv("OPENAI_API_KEY", ""),
-            groq_key=os.getenv("GROQ_API_KEY", ""),
-            cohere_key=os.getenv("COHERE_API_KEY", ""),
-            fal_key=os.getenv("FAL_API_KEY", ""),
-            google_key=os.getenv("GOOGLE_API_KEY", ""),
-        )
+        # Logging Configuration
+        self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+        self.LOG_DIR = os.getenv("LOG_DIR", "logs")
+        self.LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-    @classmethod
-    def get(cls) -> "Config":
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
+        # Database URLs
+        self.DATABASE_URLS = {
+            "session": os.getenv("DATABASE_SESSION_URL"),
+            "transaction": os.getenv("DATABASE_TRANSACTION_URL"),
+            "direct": os.getenv("DATABASE_DIRECT_URL"),
+        }
 
-    def validate(self) -> bool:
-        """Validate that all required configuration values are present."""
-        required_fields = [
-            (self.discord.token, "Discord token is missing"),
-            (self.discord.secret, "Discord secret is missing"),
-            (self.discord.owner_id, "Discord owner ID is missing"),
-            (self.database.session_url, "Database session URL is missing"),
-        ]
 
-        for value, error_message in required_fields:
-            if not value:
-                raise ValueError(error_message)
+# Create a global instance
+config = Config()
 
-        return True
+# Usage example:
+# from src.core.config import config
+# print(config.DISCORD_TOKEN)
+# print(config.SERVICES_CONFIG['database'])
