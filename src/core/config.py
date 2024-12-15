@@ -1,5 +1,4 @@
 import os
-from typing import Dict, Any
 from dotenv import load_dotenv
 
 
@@ -50,7 +49,9 @@ class Config:
                 "enabled": True,
                 "class": "src.services.database.DatabaseSession",
                 "config": {
-                    "url": os.getenv("DATABASE_SESSION_URL"),
+                    "session_url": os.getenv("DATABASE_SESSION_URL"),
+                    "transaction_url": os.getenv("DATABASE_TRANSACTION_URL"),
+                    "direct_url": os.getenv("DATABASE_DIRECT_URL"),
                     "pool_size": int(os.getenv("DATABASE_POOL_SIZE", 20)),
                     "pool_timeout": int(os.getenv("DATABASE_POOL_TIMEOUT", 30)),
                     "use_connection_pooling": os.getenv(

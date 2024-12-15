@@ -3,10 +3,9 @@
 from contextlib import contextmanager
 from typing import Generator, Set
 import logging
-from sqlalchemy import create_engine, inspect, MetaData
+from sqlalchemy import MetaData, Table, create_engine
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
-from sqlalchemy.schema import Table
+from sqlalchemy.pool import NullPool
 
 from .base import Base, ServiceInterface
 
@@ -16,20 +15,49 @@ logger = logging.getLogger(__name__)
 class DatabaseSession(ServiceInterface):
     """Manages database connections and sessions."""
 
-    def __init__(self, database_url: str = "sqlite:///bot.db"):
+    def __init__(
+        self,
+        session_url: str,
+        transaction_url: str = None,
+        direct_url: str = None,
+        pool_size: int = 20,
+        pool_timeout: int = 30,
+        use_connection_pooling: bool = True,
+    ):
         """
         Initialize database connection.
 
         Args:
-            database_url: SQLAlchemy database URL. Defaults to SQLite.
+            session_url: Main database URL for regular queries
+            transaction_url: URL for transaction-heavy operations
+            direct_url: Direct connection URL bypassing pooler
+            pool_size: Maximum number of connections in pool
+            pool_timeout: Seconds to wait for available connection
+            use_connection_pooling: Whether to use connection pooling
         """
-        self.engine = create_engine(
-            database_url,
-            connect_args={"check_same_thread": False},  # Required for SQLite
-            poolclass=StaticPool,  # Better for single-threaded applications
+        # Use direct URL if connection pooling is disabled
+        connection_url = direct_url if not use_connection_pooling else session_url
+
+        # Configure SQLAlchemy engine
+        engine_args = {
+            "pool_pre_ping": True,  # Enable connection health checks
+            "pool_size": pool_size if use_connection_pooling else None,
+            "pool_timeout": pool_timeout if use_connection_pooling else None,
+            "poolclass": None
+            if use_connection_pooling
+            else NullPool,  # Disable SQLAlchemy pooling when using Supabase's pooler
+            "connect_args": {
+                "application_name": "discord_bot",  # Helpful for monitoring
+                "sslmode": "require",  # Required for Supabase
+            },
+        }
+
+        self.engine = create_engine(connection_url, **engine_args)
+
+        self.SessionFactory = sessionmaker(
+            bind=self.engine,
+            expire_on_commit=False,  # Better performance for our use case
         )
-        self.SessionFactory = sessionmaker(bind=self.engine)
-        self._inspector = inspect(self.engine)
 
     def _get_existing_tables(self) -> Set[str]:
         """Get set of existing table names in the database."""
@@ -42,9 +70,7 @@ class DatabaseSession(ServiceInterface):
     def sync_tables(self, drop_orphaned: bool = False) -> None:
         """
         Synchronize database tables with model definitions.
-
-        Args:
-            drop_orphaned: If True, drops tables that exist in database but not in models.
+        In production, you should use Alembic migrations instead.
         """
         existing_tables = self._get_existing_tables()
         model_tables = self._get_model_tables()
@@ -104,9 +130,17 @@ class DatabaseSession(ServiceInterface):
         return self.SessionFactory()
 
     async def start(self) -> None:
-        # Initialize connection pool and create tables
-        self.create_tables()
+        """Initialize connection pool and verify database connection"""
+        try:
+            # Test connection
+            with self.engine.connect() as conn:
+                conn.execute("SELECT 1")
+            logger.info("Successfully connected to database")
+        except Exception as e:
+            logger.error(f"Failed to connect to database: {str(e)}")
+            raise
 
     async def stop(self) -> None:
-        # Close all sessions and connection pool
+        """Close all connections"""
         self.engine.dispose()
+        logger.info("Database connections closed")
