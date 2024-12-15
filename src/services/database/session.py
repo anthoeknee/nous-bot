@@ -3,11 +3,13 @@
 from contextlib import contextmanager
 from typing import Generator, Set
 import logging
-from sqlalchemy import MetaData, Table, create_engine
+from sqlalchemy import MetaData, Table, create_engine, inspect
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import NullPool
+import sys
 
-from .base import Base, ServiceInterface
+from src.services.base import ServiceInterface
+from .base import Base
 
 logger = logging.getLogger(__name__)
 
@@ -38,21 +40,25 @@ class DatabaseSession(ServiceInterface):
         # Use direct URL if connection pooling is disabled
         connection_url = direct_url if not use_connection_pooling else session_url
 
-        # Configure SQLAlchemy engine
-        engine_args = {
-            "pool_pre_ping": True,  # Enable connection health checks
-            "pool_size": pool_size if use_connection_pooling else None,
-            "pool_timeout": pool_timeout if use_connection_pooling else None,
-            "poolclass": None
-            if use_connection_pooling
-            else NullPool,  # Disable SQLAlchemy pooling when using Supabase's pooler
-            "connect_args": {
-                "application_name": "discord_bot",  # Helpful for monitoring
-                "sslmode": "require",  # Required for Supabase
-            },
-        }
+        # Replace asyncpg with psycopg2 for Alembic compatibility
+        if "alembic" in sys.modules:
+            connection_url = connection_url.replace("postgresql+asyncpg", "postgresql")
+            engine_args = {
+                "pool_pre_ping": True,
+                "poolclass": NullPool,
+            }
+        else:
+            engine_args = {
+                "pool_pre_ping": True,
+                "pool_size": pool_size if use_connection_pooling else None,
+                "pool_timeout": pool_timeout if use_connection_pooling else None,
+                "poolclass": None if use_connection_pooling else NullPool,
+            }
 
         self.engine = create_engine(connection_url, **engine_args)
+
+        # Initialize inspector
+        self._inspector = inspect(self.engine)
 
         self.SessionFactory = sessionmaker(
             bind=self.engine,
