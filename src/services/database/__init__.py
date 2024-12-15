@@ -8,11 +8,16 @@ from .session import DatabaseSession
 from .models import User
 from src.core.config import config
 
-# Create default database instance with configuration from config
+# Create default database instance with configuration
 default_db = DatabaseSession(
-    session_url=config.DATABASE_URLS["session"],
-    transaction_url=config.DATABASE_URLS["transaction"],
-    direct_url=config.DATABASE_URLS["direct"],
+    session_url=config.SERVICES_CONFIG["database"]["config"]["session_url"],
+    transaction_url=config.SERVICES_CONFIG["database"]["config"]["transaction_url"],
+    direct_url=config.SERVICES_CONFIG["database"]["config"]["direct_url"],
+    pool_size=config.SERVICES_CONFIG["database"]["config"]["pool_size"],
+    pool_timeout=config.SERVICES_CONFIG["database"]["config"]["pool_timeout"],
+    use_connection_pooling=config.SERVICES_CONFIG["database"]["config"][
+        "use_connection_pooling"
+    ],
 )
 
 # Comment out sync_tables since we're using Alembic

@@ -3,10 +3,10 @@ Flexible caching service for the Discord bot.
 Provides a Redis-based caching implementation with support for JSON and Pickle serialization.
 """
 
-from .interface import CacheInterface
-from .service import RedisCache
+from .interface import RedisInterface
+from .service import RedisService
 
 # Create a default cache instance for general use
-default_cache = RedisCache(prefix="discord_bot")
+default_cache = RedisService(prefix="discord_bot")
 
-__all__ = ["CacheInterface", "RedisCache", "default_cache"]
+__all__ = ["RedisInterface", "RedisService", "default_cache"]

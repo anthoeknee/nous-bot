@@ -5,9 +5,8 @@ T = TypeVar("T")
 
 
 class RedisInterface(ABC):
-    """Combined interface for Redis-based caching and events"""
+    """Interface for Redis-based caching and events"""
 
-    # Cache methods
     @abstractmethod
     def get(self, key: str) -> Optional[T]:
         """Retrieve a value from cache."""
@@ -18,20 +17,17 @@ class RedisInterface(ABC):
         """Store a value in cache with optional TTL in seconds."""
         pass
 
-    # Event methods
     @abstractmethod
-    async def publish(self, channel: str, message: Any) -> None:
-        """Publish message to a channel"""
+    def delete(self, key: str) -> bool:
+        """Remove a value from cache."""
         pass
 
     @abstractmethod
-    async def subscribe(
-        self, channel: str, handler: Callable[[str, Any], None]
-    ) -> None:
-        """Subscribe to a channel with a handler"""
+    async def start(self) -> None:
+        """Initialize the Redis connection."""
         pass
 
     @abstractmethod
-    async def unsubscribe(self, channel: str) -> None:
-        """Unsubscribe from a channel"""
+    async def stop(self) -> None:
+        """Cleanup the Redis connection."""
         pass

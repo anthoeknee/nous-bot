@@ -64,9 +64,9 @@ class ServiceManager:
             module = importlib.import_module(module_path)
             service_class = getattr(module, class_name)
 
+            # Pass the configuration from the new structure
             service_instance = service_class(**settings.get("config", {}))
 
-            # Start the service if it has a start method
             if hasattr(service_instance, "start"):
                 await service_instance.start()
 

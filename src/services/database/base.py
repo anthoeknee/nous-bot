@@ -4,6 +4,8 @@ from typing import TypeVar, Type, Optional, Any
 from datetime import datetime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, DateTime
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import select
 
 T = TypeVar("T")
 Base = declarative_base()
@@ -15,33 +17,37 @@ class BaseModel(Base):
     __abstract__ = True
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     @classmethod
-    def create(cls: Type[T], session: Any, **kwargs) -> T:
+    async def create(cls: Type[T], session: AsyncSession, **kwargs) -> T:
         """Create a new instance and add it to the session."""
         instance = cls(**kwargs)
         session.add(instance)
+        await session.flush()
         return instance
 
     @classmethod
-    def get(cls: Type[T], session: Any, id: int) -> Optional[T]:
+    async def get(cls: Type[T], session: AsyncSession, id: int) -> Optional[T]:
         """Get an instance by ID."""
-        return session.query(cls).filter(cls.id == id).first()
+        return await session.get(cls, id)
 
     @classmethod
-    def get_all(cls: Type[T], session: Any) -> list[T]:
+    async def get_all(cls: Type[T], session: AsyncSession) -> list[T]:
         """Get all instances."""
-        return session.query(cls).all()
+        result = await session.execute(select(cls))
+        return result.scalars().all()
 
-    def update(self, session: Any, **kwargs) -> None:
+    async def update(self, session: AsyncSession, **kwargs) -> None:
         """Update instance attributes."""
         for key, value in kwargs.items():
             if hasattr(self, key):
                 setattr(self, key, value)
         self.updated_at = datetime.utcnow()
+        await session.flush()
 
-    def delete(self, session: Any) -> None:
+    async def delete(self, session: AsyncSession) -> None:
         """Delete the instance."""
-        session.delete(self)
+        await session.delete(self)
+        await session.flush()
