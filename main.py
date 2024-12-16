@@ -1,17 +1,25 @@
 import asyncio
 import sys
+import time
 from src.core.client import DiscordBot
 from src.core.config import config
 from src.utils.logging import get_logger
+from src.services import get_services
 
 logger = get_logger()
 
 
 async def main():
     """Main entry point for the Discord bot."""
+    start_time = time.time()
+
     try:
-        # Create and start the bot
+        # Create bot and initialize services once
         bot = DiscordBot()
+        await bot.setup_hook()
+
+        logger.info(f"Startup completed in {time.time() - start_time:.2f}s")
+
         async with bot:
             await bot.start(config.DISCORD_TOKEN)
 
@@ -22,16 +30,10 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        # Ensure required directories exist
         config.ensure_directories()
-
-        # Run the bot
         asyncio.run(main())
-
     except KeyboardInterrupt:
-        logger.info("Bot shutdown by user")
         sys.exit(0)
-
     except Exception as e:
         logger.critical(f"Unhandled exception: {str(e)}")
         sys.exit(1)

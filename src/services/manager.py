@@ -1,83 +1,66 @@
 # src/services/manager.py
-from typing import Optional, Dict, Any
-import importlib
-from src.core.config import config
+from typing import Dict, Any
+import asyncio
 from src.utils.logging import get_logger
+from src.core.config import config
+from .base import ServiceInterface
 
 logger = get_logger()
 
 
 class ServiceManager:
-    """Manages all application services with dependency handling."""
-
-    _instance: Optional["ServiceManager"] = None
+    _instance = None
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+            cls._instance._services = {}
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self):
+    _services: Dict[str, ServiceInterface]
+
+    @classmethod
+    def get_instance(cls):
+        return cls() if cls._instance is None else cls._instance
+
+    async def initialize_services(self) -> None:
+        """Initialize all enabled services in parallel."""
         if self._initialized:
             return
 
-        self._services: Dict[str, Any] = {}
+        service_configs = config.SERVICES_CONFIG
+        init_tasks = []
+
+        for service_name, service_config in service_configs.items():
+            if not service_config.get("enabled", True):
+                continue
+
+            try:
+                # Dynamically import and instantiate service
+                module_path, class_name = service_config["class"].rsplit(".", 1)
+                module = __import__(module_path, fromlist=[class_name])
+                service_class = getattr(module, class_name)
+
+                # Create service instance
+                service = service_class(**service_config.get("config", {}))
+                self._services[service_name] = service
+
+                # Add initialization task
+                init_tasks.append(service.start())
+
+            except Exception as e:
+                logger.error(f"Failed to create service {service_name}: {e}")
+                raise
+
+        # Initialize all services in parallel
+        if init_tasks:
+            await asyncio.gather(*init_tasks)
+
         self._initialized = True
-        self._started = False
+        logger.info("All services initialized")
 
-    @classmethod
-    def get_instance(cls) -> "ServiceManager":
-        return cls()
-
-    async def initialize_services(self) -> None:
-        """Initialize core services first, then others"""
-        if self._started:
-            return
-
-        # Initialize core services first
-        core_services = ["database", "cache"]
-
-        for service_name in core_services:
-            if service_name in config.SERVICES_CONFIG:
-                await self._init_service(
-                    service_name, config.SERVICES_CONFIG[service_name]
-                )
-
-        # Initialize remaining services
-        for service_name, settings in config.SERVICES_CONFIG.items():
-            if service_name not in core_services:
-                await self._init_service(service_name, settings)
-
-        self._started = True
-        logger.info("All services initialized successfully")
-
-    async def _init_service(self, service_name: str, settings: dict) -> None:
-        """Initialize a single service"""
-        if not settings.get("enabled", True):
-            logger.info(f"Service {service_name} is disabled, skipping initialization")
-            return
-
-        try:
-            # Import and instantiate the service
-            module_path, class_name = settings["class"].rsplit(".", 1)
-            module = importlib.import_module(module_path)
-            service_class = getattr(module, class_name)
-
-            # Pass the configuration from the new structure
-            service_instance = service_class(**settings.get("config", {}))
-
-            if hasattr(service_instance, "start"):
-                await service_instance.start()
-
-            self._services[service_name] = service_instance
-            logger.info(f"Service {service_name} initialized successfully")
-
-        except Exception as e:
-            logger.error(f"Failed to initialize service {service_name}: {str(e)}")
-            raise
-
-    def get_service(self, name: str) -> Any:
+    def get_service(self, name: str) -> ServiceInterface:
         """Get a service by name"""
         if name not in self._services:
             raise KeyError(f"Service {name} not found")

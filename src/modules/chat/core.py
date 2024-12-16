@@ -11,9 +11,9 @@ from .memory.short_term import ShortTermMemory
 class ChatModule:
     """Handles chat interactions and responses"""
 
-    def __init__(self, bot: commands.Bot, redis: RedisInterface, llm: LLMService):
+    def __init__(self, bot: commands.Bot, cache: RedisInterface, llm: LLMService):
         self.bot = bot
-        self.redis = redis
+        self.cache = cache
         self.llm = llm
         self.memory = ShortTermMemory(max_messages=50, ttl=6300)  # 1h45m in seconds
         self.events = ChatEvents(bot, self)

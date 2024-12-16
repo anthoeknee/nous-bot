@@ -5,9 +5,9 @@ from src.services.llm import LLMService
 from .core import ChatModule
 
 
-async def setup(bot: commands.Bot, redis: RedisInterface, llm: LLMService) -> None:
+async def setup(bot: commands.Bot, cache: RedisInterface, llm: LLMService) -> None:
     """Set up the chat module"""
-    chat_module = ChatModule(bot, redis, llm)
+    chat_module = ChatModule(bot, cache, llm)
 
     @bot.event
     async def on_message(message):

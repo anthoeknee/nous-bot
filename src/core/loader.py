@@ -2,158 +2,149 @@ from typing import Dict, Set, Callable, Any
 from pathlib import Path
 import importlib
 import inspect
-from collections import defaultdict
 import networkx as nx
 from src.utils.logging import get_logger
+import asyncio
 
 logger = get_logger()
 
 
 class ModuleLoader:
-    """
-    Handles discovery, dependency resolution, and loading of bot modules.
-    """
+    """Handles discovery, dependency resolution, and loading of bot modules."""
 
     def __init__(self, modules_path: str = "src/modules"):
-        self.modules_path = Path(modules_path)
+        self.modules_path = Path(modules_path).resolve()
         self.discovered_modules: Dict[str, Any] = {}
         self.setup_functions: Dict[str, Callable] = {}
-        self.dependencies: Dict[str, Set[str]] = defaultdict(set)
+        self.dependencies: Dict[str, Set[str]] = {}
         self.loaded_modules: Set[str] = set()
 
     def discover_modules(self) -> None:
-        """
-        Recursively discover all Python modules in the modules directory.
-        """
-        logger.info(f"Discovering modules in {self.modules_path}")
+        """Recursively discover all Python modules with setup functions."""
+        if not self.modules_path.exists():
+            logger.error(f"Modules directory not found: {self.modules_path}")
+            return
 
         for file_path in self.modules_path.rglob("*.py"):
-            if file_path.name.startswith("_"):
+            if file_path.name.startswith("_") and not file_path.name.startswith("__"):
                 continue
 
-            relative_path = file_path.relative_to(Path("."))
-            module_path = str(relative_path).replace("/", ".").replace("\\", ".")[:-3]
-
             try:
-                module = importlib.import_module(module_path)
-                self.discovered_modules[module_path] = module
+                module_path = (
+                    str(file_path.relative_to(Path(".").resolve()))
+                    .replace("/", ".")
+                    .replace("\\", ".")[:-3]
+                )
 
-                # Look for setup function
+                module = importlib.import_module(module_path)
+
                 if hasattr(module, "setup"):
+                    self.discovered_modules[module_path] = module
                     self.setup_functions[module_path] = getattr(module, "setup")
                     self._analyze_dependencies(module_path)
 
             except Exception as e:
-                logger.error(f"Failed to import module {module_path}: {str(e)}")
+                logger.error(f"Failed to load {file_path}: {e}")
 
         logger.info(f"Discovered {len(self.discovered_modules)} modules")
 
     def _analyze_dependencies(self, module_path: str) -> None:
-        """
-        Analyze setup function signature to determine required dependencies.
-        """
+        """Extract module dependencies from setup function signature."""
         setup_func = self.setup_functions[module_path]
-        signature = inspect.signature(setup_func)
+        params = inspect.signature(setup_func).parameters
 
-        for param_name, param in signature.parameters.items():
-            # Skip self parameter for class methods
-            if param_name == "self":
-                continue
-
-            # Add parameter as dependency
-            self.dependencies[module_path].add(param_name)
+        self.dependencies[module_path] = {
+            param for param, _ in params.items() if param not in ("bot", "self")
+        }
 
     def _resolve_load_order(self) -> list[str]:
-        """
-        Use topological sorting to determine correct module load order.
-        """
+        """Determine module load order using topological sorting."""
         graph = nx.DiGraph()
 
-        # Add all modules as nodes
-        for module in self.setup_functions.keys():
+        # Add all modules and their dependencies
+        for module in self.setup_functions:
             graph.add_node(module)
-
-        # Add dependency edges
-        for module, deps in self.dependencies.items():
-            for dep in deps:
-                # Find modules that provide this dependency
-                providers = self._find_dependency_providers(dep)
-                if providers:
-                    for provider in providers:
-                        graph.add_edge(provider, module)
+            for dep in self.dependencies.get(module, set()):
+                for provider in self._find_dependency_providers(dep):
+                    graph.add_edge(provider, module)
 
         try:
-            # Perform topological sort
-            return list(nx.topological_sort(graph))
+            ordered = list(nx.topological_sort(graph))
+            remaining = set(self.setup_functions) - set(ordered)
+            return ordered + list(remaining)
         except nx.NetworkXUnfeasible:
-            logger.error("Circular dependency detected in modules")
             raise ValueError("Circular dependency detected")
 
     def _find_dependency_providers(self, dependency: str) -> Set[str]:
-        """
-        Find modules that provide a given dependency.
-        """
-        providers = set()
-
-        for module_path, module in self.discovered_modules.items():
-            if hasattr(module, f"provide_{dependency}"):
-                providers.add(module_path)
-
-        return providers
+        """Find modules that provide a given dependency."""
+        return {
+            module_path
+            for module_path, module in self.discovered_modules.items()
+            if hasattr(module, f"provide_{dependency}")
+        }
 
     async def load_all(self, bot: Any) -> None:
-        """
-        Load all modules in the correct order.
-
-        Args:
-            bot: The Discord bot instance
-        """
+        """Load all modules in parallel within dependency groups."""
         if not self.discovered_modules:
             self.discover_modules()
 
+        # Group modules by dependency level
         load_order = self._resolve_load_order()
-        logger.info(f"Loading modules in order: {load_order}")
+        dependency_groups = self._group_by_dependency_level(load_order)
 
-        for module_path in load_order:
-            await self.load_module(module_path, bot)
+        # Load each group in parallel
+        for group in dependency_groups:
+            tasks = [self.load_module(module_path, bot) for module_path in group]
+            await asyncio.gather(*tasks)
+
+    def _group_by_dependency_level(self, load_order: list[str]) -> list[set[str]]:
+        """Group modules by their dependency level for parallel loading."""
+        graph = nx.DiGraph()
+
+        # Build dependency graph
+        for module in load_order:
+            graph.add_node(module)
+            for dep in self.dependencies.get(module, set()):
+                for provider in self._find_dependency_providers(dep):
+                    graph.add_edge(provider, module)
+
+        # Group nodes by their longest path length from root
+        levels: Dict[int, set[str]] = {}
+        for node in graph.nodes():
+            # Find longest path length to this node
+            paths = [len(path) for path in nx.all_simple_paths(graph, node, node)]
+            level = max(paths) if paths else 0
+            levels.setdefault(level, set()).add(node)
+
+        # Return groups in order
+        return [levels[level] for level in sorted(levels.keys())]
 
     async def load_module(self, module_path: str, bot: Any) -> None:
-        """
-        Load a single module and its dependencies.
-
-        Args:
-            module_path: The module path to load
-            bot: The Discord bot instance
-        """
+        """Load a single module with its dependencies."""
         if module_path in self.loaded_modules:
             return
 
-        logger.info(f"Loading module: {module_path}")
-
         try:
             # Collect dependencies
-            deps = {}
-            for dep in self.dependencies[module_path]:
-                provider = next(iter(self._find_dependency_providers(dep)), None)
-                if provider:
-                    module = self.discovered_modules[provider]
-                    deps[dep] = getattr(module, f"provide_{dep}")()
+            deps = {"bot": bot}
+            for dep in self.dependencies.get(module_path, set()):
+                if provider := next(iter(self._find_dependency_providers(dep)), None):
+                    deps[dep] = getattr(
+                        self.discovered_modules[provider], f"provide_{dep}"
+                    )()
                 else:
-                    # Check if dependency is a service
+                    # Try to get from service manager
                     from src.services import get_services
 
                     try:
                         deps[dep] = get_services().get_service(dep)
                     except KeyError:
-                        logger.warning(f"Dependency {dep} not found for {module_path}")
+                        raise ValueError(f"Dependency not found: {dep}")
 
-            # Call setup function with dependencies
-            setup_func = self.setup_functions[module_path]
-            await setup_func(bot, **deps)
-
+            await self.setup_functions[module_path](**deps)
             self.loaded_modules.add(module_path)
-            logger.info(f"Successfully loaded module: {module_path}")
+            logger.info(f"Loaded module: {module_path}")
 
         except Exception as e:
-            logger.error(f"Failed to load module {module_path}: {str(e)}")
+            logger.error(f"Failed to load {module_path}: {e}")
             raise
