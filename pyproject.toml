@@ -9,6 +9,8 @@ readme = "README.md"
 python = "^3.10"
 colorama = "^0.4.6"
 discord-py = "^2.4.0"
+pydantic-settings = "^2.7.0"
+watchdog = "^6.0.0"
 
 
 [build-system]
