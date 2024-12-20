@@ -8,3 +8,4 @@ logs/
 data/
 .vscode/
 *.pyc
+docs/revamp_guide.md

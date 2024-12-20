@@ -1,9 +1,7 @@
 from typing import Dict, Type, Optional, Any
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 
 from .main import DatabaseService
-from src.core.exceptions import DatabaseError
 
 
 class DatabaseManager:
