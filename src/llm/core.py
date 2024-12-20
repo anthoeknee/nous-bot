@@ -25,11 +25,14 @@ class LLMCore:
         self.provider = GroqProvider(tool_registry=self.tool_registry)
 
     async def process_user_message(self, message: dict) -> str:
-        """
-        Given a user message dict, update short-term memory and route to the appropriate model.
-        Return the LLM text response.
-        """
-        # Store user message
+        """Process user message, handling both text and images."""
+
+        # If message contains an image, process it first
+        if message.get("type") == "image_url":
+            # The image description will be automatically handled in the provider
+            pass
+
+        # Store user message (original message with image URL if present)
         await self.short_term_memory.add_message(
             "user", message.get("content", ""), extra=message
         )

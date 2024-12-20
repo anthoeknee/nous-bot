@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional
 from groq import Groq
+import json
 
 from .base import BaseProvider  # Assuming you have a simple base class
 from src.llm.tools.registry import ToolRegistry
@@ -23,63 +24,81 @@ class GroqProvider(BaseProvider):
         self.text_model = "llama-3.3-70b-versatile"
         self.tool_registry = tool_registry or ToolRegistry()
         self.logger = ColorLogger(__name__).getChild("groq")
+        self.vision_system_prompt = """You are an AI trained to provide clear, detailed descriptions of images.
+        Focus on key elements, context, and any text visible in the image. Format your response as a concise
+        paragraph starting with 'Image Description: '."""
 
-    def _prepare_groq_messages(
-        self, conversation_history: List[Dict[str, Any]]
-    ) -> List[Dict]:
-        """
-        Convert the internal conversation structure into the format Groq expects.
-        Handles both text and image messages.
-        """
-        groq_messages = []
-        for entry in conversation_history:
-            # Create a clean message with only the required fields
-            if entry.get("type") == "image_url":
-                groq_messages.append(
+        self.text_system_prompt = """You are a helpful AI assistant. When users share images with you,
+        you will receive detailed descriptions of those images. Treat these descriptions as if you can
+        see the images yourself, and incorporate your understanding of them naturally into the conversation."""
+
+    def process_image(self, image_url: str) -> str:
+        """Process an image URL and return a description."""
+        try:
+            response = self.client.chat.completions.create(
+                model=self.vision_model,
+                messages=[
                     {
-                        "role": entry["role"],
+                        "role": "user",
                         "content": [
                             {
                                 "type": "text",
-                                "text": entry.get("content", "Analyze this image:"),
+                                "text": "Describe what you see in this image, focusing on key elements, context, and any visible text.",
                             },
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": entry["url"]},
-                            },
+                            {"type": "image_url", "image_url": {"url": image_url}},
                         ],
                     }
-                )
-            else:
-                # For text messages, only include role and content
-                groq_messages.append(
-                    {"role": entry["role"], "content": entry["content"]}
-                )
+                ],
+                temperature=0.7,
+                max_tokens=500,
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            self.logger.error(f"Image processing error: {str(e)}")
+            return f"Error processing image: {str(e)}"
+
+    def _prepare_groq_messages(
+        self, messages: List[Dict[str, Any]]
+    ) -> List[Dict[str, str]]:
+        """Prepare messages for Groq API format"""
+        groq_messages = []
+
+        # Add custom system message
+        groq_messages.append({"role": "system", "content": self.text_system_prompt})
+
+        for message in messages:
+            content = message.get("content", "")
+            # Handle image messages by replacing with their description
+            if message.get("type") == "image_url":
+                image_description = self.process_image(message["url"])
+                content = image_description
+
+            prepared_message = {"role": message["role"], "content": content}
+            groq_messages.append(prepared_message)
 
         return groq_messages
 
     def generate_response(
         self,
         messages: List[Dict[str, Any]],
-        use_vision_model: bool = False,
+        use_vision_model: bool = False,  # This parameter is now ignored
         tools: Optional[List[Dict[str, Any]]] = None,
         **kwargs,
     ) -> str:
-        """Generate a response using the appropriate Groq model."""
+        """Generate a response using the text model only."""
         try:
             groq_messages = self._prepare_groq_messages(messages)
 
-            # Set up base parameters
+            # Always use text model for final responses
             params = {
-                "model": self.vision_model if use_vision_model else self.text_model,
+                "model": self.text_model,
                 "messages": groq_messages,
                 "temperature": kwargs.get("temperature", 0.7),
                 "max_tokens": kwargs.get("max_tokens", 4096),
                 "stream": False,
             }
 
-            # Only add tools if using text model (vision model doesn't support tools)
-            if tools and not use_vision_model:
+            if tools:
                 params["tools"] = tools
                 params["tool_choice"] = "auto"
 
