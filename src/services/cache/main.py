@@ -6,7 +6,7 @@ import redis.asyncio as redis
 from redis.asyncio.connection import ConnectionPool
 from redis.exceptions import RedisError
 
-from src.core import settings
+from src.core.config import settings
 from src.core.exceptions import CacheError
 from ..base import BaseService
 from .interface import CacheInterface

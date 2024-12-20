@@ -11,6 +11,7 @@ colorama = "^0.4.6"
 discord-py = "^2.4.0"
 pydantic-settings = "^2.7.0"
 watchdog = "^6.0.0"
+groq = "^0.13.1"
 
 
 [build-system]

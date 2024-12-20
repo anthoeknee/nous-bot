@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 
-from src.core.config import config
+from src.core.config import settings
 from src.core.exceptions import DatabaseError
 from ..base import BaseService
 from .interface import DatabaseInterface
@@ -32,12 +32,12 @@ class DatabaseService(BaseService, DatabaseInterface[T]):
         """Initialize database engine and session maker"""
         try:
             self._engine = create_async_engine(
-                str(config.database.session_url),
-                echo=config.log_level == "DEBUG",
+                str(settings.database.session_url),
+                echo=settings.log_level == "DEBUG",
                 pool_pre_ping=True,
-                pool_size=config.database.pool_size,
+                pool_size=settings.database.pool_size,
                 max_overflow=10,
-                pool_timeout=config.database.pool_timeout,
+                pool_timeout=settings.database.pool_timeout,
                 pool_recycle=3600,
                 future=True,
             )

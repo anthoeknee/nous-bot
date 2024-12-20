@@ -1,7 +1,6 @@
 # core/__init__.py
-
-from .client import Bot
 from .config import settings
+from .client import Bot
 from .process_manager import ProcessManager
 from .loader import CogLoader
 from .exceptions import ServiceError

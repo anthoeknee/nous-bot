@@ -10,14 +10,15 @@ logger = logging.getLogger(__name__)
 
 
 async def main():
+    bot = None
     try:
         bot = Bot()
         await bot.start(bot.settings.discord_token)
     except Exception as e:
         logger.error(f"Failed to start bot: {e}", exc_info=True)
-        raise
     finally:
-        await bot.close()
+        if bot is not None:
+            await bot.close()
 
 
 if __name__ == "__main__":
