@@ -5,6 +5,7 @@ import json
 from .base import BaseProvider  # Assuming you have a simple base class
 from src.llm.tools.registry import ToolRegistry
 from src.utils.logging import ColorLogger
+from src.llm.personality import PersonalityEngine
 
 
 class GroqProvider(BaseProvider):
@@ -24,13 +25,7 @@ class GroqProvider(BaseProvider):
         self.text_model = "llama-3.3-70b-versatile"
         self.tool_registry = tool_registry or ToolRegistry()
         self.logger = ColorLogger(__name__).getChild("groq")
-        self.vision_system_prompt = """You are an AI trained to provide clear, detailed descriptions of images.
-        Focus on key elements, context, and any text visible in the image. Format your response as a concise
-        paragraph starting with 'Image Description: '."""
-
-        self.text_system_prompt = """You are a helpful AI assistant. When users share images with you,
-        you will receive detailed descriptions of those images. Treat these descriptions as if you can
-        see the images yourself, and incorporate your understanding of them naturally into the conversation."""
+        self.personality_engine = PersonalityEngine()
 
     def process_image(self, image_url: str) -> str:
         """Process an image URL and return a description."""
@@ -63,8 +58,13 @@ class GroqProvider(BaseProvider):
         """Prepare messages for Groq API format"""
         groq_messages = []
 
-        # Add custom system message
-        groq_messages.append({"role": "system", "content": self.text_system_prompt})
+        # Generate dynamic system prompt based on current context
+        session_data = {
+            "message_count": len(messages),
+            "tools_available": bool(self.tool_registry._tools),
+        }
+        system_prompt = self.personality_engine.render_system_prompt(session_data)
+        groq_messages.append({"role": "system", "content": system_prompt})
 
         for message in messages:
             content = message.get("content", "")
