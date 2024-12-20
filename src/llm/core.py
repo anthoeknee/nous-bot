@@ -10,7 +10,6 @@ core.py consolidates the logic of setting up and using the LLM modules:
 from src.llm.memory.short_term import ShortTermMemory
 from src.llm.tools.registry import ToolRegistry
 from src.llm.providers.groq import GroqProvider
-from src.llm.routing.intent_router import route_request  # Example usage
 
 
 class LLMCore:
@@ -32,7 +31,7 @@ class LLMCore:
             # The image description will be automatically handled in the provider
             pass
 
-        # Store user message (original message with image URL if present)
+        # Store user message
         await self.short_term_memory.add_message(
             "user", message.get("content", ""), extra=message
         )
@@ -43,9 +42,9 @@ class LLMCore:
         # Build any tool definitions
         tools_for_llm = self.tool_registry.build_tools_for_groq()
 
-        # Route the request to correct model
-        response_text = route_request(
-            conversation_history, self.provider, tools=tools_for_llm
+        # Generate response directly (no routing needed)
+        response_text = self.provider.generate_response(
+            conversation_history, tools=tools_for_llm
         )
 
         # Save the assistant response

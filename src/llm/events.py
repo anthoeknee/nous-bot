@@ -27,11 +27,26 @@ class LLMEventsCog(commands.Cog):
         if message.author == self.bot.user or message.author.bot:
             return
 
-        if message.content.startswith("!"):
-            # Could handle commands or other logic
+        # Check if the message is a command using discord.py's command processing
+        ctx = await self.bot.get_context(message)
+        if ctx.valid:  # This will be True for both slash and prefix commands
             return
 
         try:
+            # Always process DM messages
+            is_dm = isinstance(message.channel, discord.DMChannel)
+            # Check if message mentions the bot or is a reply to the bot's message
+            is_bot_mention = self.bot.user in message.mentions
+            is_bot_reply = (
+                message.reference
+                and message.reference.resolved
+                and message.reference.resolved.author == self.bot.user
+            )
+
+            # Only process if it's a DM or the bot was mentioned/replied to
+            if not (is_dm or is_bot_mention or is_bot_reply):
+                return
+
             session_id = f"discord_session_{message.channel.id}"
             if session_id not in self.active_sessions:
                 self.active_sessions[session_id] = LLMCore(session_id, self.cache)

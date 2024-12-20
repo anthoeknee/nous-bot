@@ -11,7 +11,7 @@ tools = ToolRegistry()
 def calculate(expression: str) -> float:
     try:
         return float(eval(expression))
-    except:
+    except (ValueError, SyntaxError, NameError):
         raise ValueError("Invalid expression")
 
 
