@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     redis_conversation_ttl: int = Field(ge=1)
 
     # Logging Configuration
-    log_level: str = Field(regex="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
+    log_level: str = Field(..., pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
     log_dir: str = "logs"
 
     # Service Configurations

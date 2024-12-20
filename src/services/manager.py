@@ -31,20 +31,20 @@ class ServiceManager:
             cache_service = await ServiceFactory.create_service("cache")
             self._services["cache"] = cache_service
 
-            # Initialize database service if base class provided
+            # Initialize database service
             if database_base:
                 ServiceFactory.register_service("database", DatabaseManager)
-                db_manager = await ServiceFactory.create_service(
+                self._services["database"] = await ServiceFactory.create_service(
                     "database", base_class=database_base
                 )
-                self._services["database"] = db_manager
+                await self._services["database"].initialize()
 
             # Initialize other services as needed
 
             # Start all services
-            for name, service in self._services.items():
+            for service in self._services.values():
                 await service.start()
-                self._logger.info(f"Service '{name}' started successfully")
+                self._logger.info(f"Service '{service.name}' started successfully")
 
             self._initialized = True
             self._logger.info("All services initialized successfully")
