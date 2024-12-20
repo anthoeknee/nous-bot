@@ -6,6 +6,7 @@ from .base import BaseService
 from .cache.main import RedisCache
 from .database.manager import DatabaseManager
 from src.core.exceptions import ServiceError
+from .factory import ServiceFactory
 
 
 class ServiceManager:
@@ -26,14 +27,16 @@ class ServiceManager:
 
         try:
             # Initialize cache service
-            cache_service = RedisCache()
-            await cache_service.initialize()
+            ServiceFactory.register_service("cache", RedisCache)
+            cache_service = await ServiceFactory.create_service("cache")
             self._services["cache"] = cache_service
 
             # Initialize database service if base class provided
             if database_base:
-                db_manager = DatabaseManager(database_base)
-                await db_manager.initialize()
+                ServiceFactory.register_service("database", DatabaseManager)
+                db_manager = await ServiceFactory.create_service(
+                    "database", base_class=database_base
+                )
                 self._services["database"] = db_manager
 
             # Initialize other services as needed
