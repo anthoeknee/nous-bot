@@ -10,6 +10,9 @@ core.py consolidates the logic of setting up and using the LLM modules:
 from src.llm.memory.short_term import ShortTermMemory
 from src.llm.tools.registry import ToolRegistry
 from src.llm.providers.groq import GroqProvider
+from typing import Optional, Dict, Any
+
+from src.services.cache.main import RedisCache
 
 
 class LLMCore:
@@ -17,13 +20,19 @@ class LLMCore:
     LLMCore wraps all the major components needed to handle LLM interactions.
     """
 
-    def __init__(self, session_id: str, redis_cache):
+    def __init__(
+        self,
+        session_id: str,
+        cache: RedisCache,
+        tool_registry: Optional[ToolRegistry] = None,
+    ):
         self.session_id = session_id
-        self.short_term_memory = ShortTermMemory(session_id, redis_cache)
-        self.tool_registry = ToolRegistry()
-        self.provider = GroqProvider(tool_registry=self.tool_registry)
+        self.cache = cache
+        self.memory = ShortTermMemory(session_id, cache)
+        # Initialize provider with tools
+        self.provider = GroqProvider(tool_registry=tool_registry)
 
-    async def process_user_message(self, message: dict) -> str:
+    async def process_user_message(self, message: Dict[str, Any]) -> str:
         """Process user message, handling both text and images."""
 
         # If message contains an image, process it first
@@ -32,22 +41,22 @@ class LLMCore:
             pass
 
         # Store user message
-        await self.short_term_memory.add_message(
-            "user", message.get("content", ""), extra=message
-        )
+        await self.memory.add_message("user", message.get("content", ""), extra=message)
 
         # Gather conversation history
-        conversation_history = await self.short_term_memory.get_history()
+        conversation_history = await self.memory.get_history()
 
         # Build any tool definitions
-        tools_for_llm = self.tool_registry.build_tools_for_groq()
+        tools = None
+        if hasattr(self.provider, "tool_registry") and self.provider.tool_registry:
+            tools = self.provider.tool_registry.build_tools_for_groq()
 
         # Generate response directly (no routing needed)
-        response_text = self.provider.generate_response(
-            conversation_history, tools=tools_for_llm
+        response = await self.provider.generate_response(
+            messages=conversation_history, tools=tools
         )
 
         # Save the assistant response
-        await self.short_term_memory.add_message("assistant", response_text)
+        await self.memory.add_message("assistant", response)
 
-        return response_text
+        return response

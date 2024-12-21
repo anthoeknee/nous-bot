@@ -21,6 +21,9 @@ Current Context:
 - Time: {{ current_time }}
 - Time of Day: {{ time_of_day }}
 - Current Mood: {{ current_mood }}
+{%- if user_id %}
+- Speaking with User ID: {{ user_id }}
+{%- endif %}
 {%- if session_messages > 10 %}
 - Conversation Depth: Deep into conversation
 {%- endif %}
@@ -61,6 +64,7 @@ You have access to various tools and should use them when appropriate to enhance
             "mood": session_data.get("mood"),
             "session_messages": session_data.get("message_count", 0),
             "tools_available": session_data.get("tools_available", False),
+            "user_id": session_data.get("user_id"),
         }
 
     def render_system_prompt(self, session_data: Dict[str, Any] = None) -> str:

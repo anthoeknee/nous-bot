@@ -24,7 +24,6 @@ class ModuleReloader(FileSystemEventHandler):
             ".pyd$",
             "process_manager.py",  # Prevent self-reload
         }
-        self.loaded_modules: Set[str] = set()
         self._initialize_loaded_modules()
 
     def _initialize_loaded_modules(self) -> None:
@@ -41,23 +40,26 @@ class ModuleReloader(FileSystemEventHandler):
 
     def _get_module_name(self, path: str) -> str:
         """Convert file path to module name."""
-        rel_path = os.path.relpath(path, self.src_path)
+        rel_path = os.path.relpath(path, os.path.dirname(self.src_path))
         module_path = os.path.splitext(rel_path)[0].replace(os.sep, ".")
-        return f"src.{module_path}"
+        return module_path
 
     def _reload_module(self, module_name: str) -> None:
         """Safely reload a module and its dependencies."""
         try:
+            logger.info(f"Attempting to reload module: {module_name}")
+
             if module_name in sys.modules:
-                logger.info(f"Reloading module: {module_name}")
-                importlib.reload(sys.modules[module_name])
-                self.loaded_modules.add(module_name)
+                deps = [m for m in sys.modules if m.startswith(module_name)]
+                for dep in deps:
+                    logger.info(f"Reloading dependent module: {dep}")
+                    importlib.reload(sys.modules[dep])
             else:
                 logger.info(f"Loading new module: {module_name}")
                 importlib.import_module(module_name)
-                self.loaded_modules.add(module_name)
+
         except Exception as e:
-            logger.error(f"Failed to reload {module_name}: {str(e)}")
+            logger.error(f"Failed to reload {module_name}: {str(e)}", exc_info=True)
 
     def on_modified(self, event):
         if event.is_directory or not event.src_path.endswith(".py"):
@@ -73,6 +75,7 @@ class ModuleReloader(FileSystemEventHandler):
 
         self.last_reload[event.src_path] = current_time
         module_name = self._get_module_name(event.src_path)
+        logger.info(f"File modified: {event.src_path} -> module: {module_name}")
         self._reload_module(module_name)
 
 

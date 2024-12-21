@@ -78,10 +78,10 @@ class GroqProvider(BaseProvider):
 
         return groq_messages
 
-    def generate_response(
+    async def generate_response(
         self,
         messages: List[Dict[str, Any]],
-        use_vision_model: bool = False,  # This parameter is now ignored
+        use_vision_model: bool = False,
         tools: Optional[List[Dict[str, Any]]] = None,
         **kwargs,
     ) -> str:
@@ -114,7 +114,8 @@ class GroqProvider(BaseProvider):
 
                     # Process each tool call
                     for tool_call in tool_calls:
-                        tool_result = self.tool_registry.resolve_and_invoke(
+                        # Since tool calls might be async, await them
+                        tool_result = await self.tool_registry.resolve_and_invoke(
                             tool_call.function.name, tool_call.function.arguments
                         )
 

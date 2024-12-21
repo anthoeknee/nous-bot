@@ -8,6 +8,8 @@ from discord.ext import commands
 
 from src.llm.core import LLMCore
 from src.services.registry import ServiceRegistry
+from src.llm.tools.discord_api import setup_discord_tools
+from src.llm.tools.registry import ToolRegistry
 
 
 class LLMEventsCog(commands.Cog):
@@ -20,6 +22,13 @@ class LLMEventsCog(commands.Cog):
         self.cache = ServiceRegistry.get_instance("cache")
         self.active_sessions = {}
         self.logger = self.bot.logger.getChild("llm")
+        # Initialize tool registry
+        self.tool_registry = ToolRegistry()
+        # Initialize Discord API tools
+        self.discord_tools = setup_discord_tools(bot)
+        # Add Discord tools to the LLM tool registry
+        for tool_name, tool in self.discord_tools._tools.items():
+            self.tool_registry.register(tool)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -49,7 +58,9 @@ class LLMEventsCog(commands.Cog):
 
             session_id = f"discord_session_{message.channel.id}"
             if session_id not in self.active_sessions:
-                self.active_sessions[session_id] = LLMCore(session_id, self.cache)
+                self.active_sessions[session_id] = LLMCore(
+                    session_id, self.cache, tool_registry=self.tool_registry
+                )
 
             llm_core = self.active_sessions[session_id]
 

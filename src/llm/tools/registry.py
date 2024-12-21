@@ -112,7 +112,7 @@ class ToolRegistry:
         """Returns list of tool definitions in Groq-compatible format"""
         return [tool.to_groq_schema() for tool in self._tools.values()]
 
-    def resolve_and_invoke(self, tool_name: str, arguments_json: str) -> str:
+    async def resolve_and_invoke(self, tool_name: str, arguments_json: str) -> str:
         """Invoke a tool with the provided arguments"""
         if tool_name not in self._tools:
             return json.dumps({"error": f"No tool named '{tool_name}' is registered"})
@@ -120,7 +120,11 @@ class ToolRegistry:
         tool = self._tools[tool_name]
         try:
             args = json.loads(arguments_json)
-            result = tool.function(**args)
+            # Check if the function is a coroutine
+            if inspect.iscoroutinefunction(tool.function):
+                result = await tool.function(**args)
+            else:
+                result = tool.function(**args)
             return json.dumps({"result": result})
         except Exception as e:
             return json.dumps({"error": f"Error invoking {tool_name}: {str(e)}"})
